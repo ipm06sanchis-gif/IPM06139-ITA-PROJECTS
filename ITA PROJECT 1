@@ -143,3 +143,6 @@ plt.legend()
 plt.title("Actual vs Predicted Energy Consumption")
 
 plt.show()
+
+
+# Data sourced from google colab, no external uploads. Hence, no datasets uploaded.
