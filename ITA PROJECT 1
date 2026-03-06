@@ -1,0 +1,145 @@
+import pandas as pd
+import numpy as np
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import GradientBoostingRegressor
+
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from google.colab import files
+uploaded = files.upload(household_power_consumption.txt)
+df = pd.read_csv(
+    "household_power_consumption.txt",
+    sep=';',
+    low_memory=False
+)
+
+df.head()
+df['Datetime'] = pd.to_datetime(df['Date'] + " " + df['Time'])
+
+df = df.drop(columns=['Date','Time'])
+for col in df.columns:
+    if col != 'Datetime':
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+df = df.fillna(method='ffill')
+df = df.set_index('Datetime')
+
+df.head()
+df_hourly = df.resample('H').mean()
+
+df_hourly.head()
+daily_avg = df_hourly['Global_active_power'].resample('D').mean()
+daily_var = df_hourly['Global_active_power'].resample('D').var()
+df_hourly['hour'] = df_hourly.index.hour
+
+peak_hour = df_hourly.groupby('hour')['Global_active_power'].mean()
+features = pd.DataFrame({
+    'daily_avg': daily_avg,
+    'daily_variance': daily_var
+})
+
+features = features.dropna()
+
+features.head()
+scaler = StandardScaler()
+
+scaled_features = scaler.fit_transform(features)
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+clusters = kmeans.fit_predict(scaled_features)
+
+features['Cluster'] = clusters
+
+features.head()
+plt.figure(figsize=(8,6))
+
+sns.scatterplot(
+    x=features['daily_avg'],
+    y=features['daily_variance'],
+    hue=features['Cluster'],
+    palette='Set1'
+)
+
+plt.title("Energy Consumption Clusters")
+plt.show()
+features['target'] = features['daily_avg'].shift(-1)
+
+features = features.dropna()
+X = features[['daily_avg','daily_variance','Cluster']]
+y = features['target']
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y,
+    test_size=0.2,
+    random_state=42
+)
+rf = RandomForestRegressor(
+    n_estimators=100,
+    random_state=42
+)
+
+rf.fit(X_train, y_train)
+
+rf_pred = rf.predict(X_test)
+gb = GradientBoostingRegressor()
+
+gb.fit(X_train, y_train)
+
+gb_pred = gb.predict(X_test)
+def evaluate_model(y_true, y_pred):
+
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    mae = mean_absolute_error(y_true, y_pred)
+    r2 = r2_score(y_true, y_pred)
+
+    return rmse, mae, r2
+rf_metrics = evaluate_model(y_test, rf_pred)
+
+print("Random Forest Performance")
+print("RMSE:", rf_metrics[0])
+print("MAE:", rf_metrics[1])
+print("R2 Score:", rf_metrics[2])
+gb_metrics = evaluate_model(y_test, gb_pred)
+
+print("Gradient Boosting Performance")
+print("RMSE:", gb_metrics[0])
+print("MAE:", gb_metrics[1])
+print("R2 Score:", gb_metrics[2])
+for cluster in features['Cluster'].unique():
+
+    cluster_data = features[features['Cluster'] == cluster]
+
+    X = cluster_data[['daily_avg','daily_variance']]
+    y = cluster_data['target']
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y,
+        test_size=0.2,
+        random_state=42
+    )
+
+    model = RandomForestRegressor()
+    model.fit(X_train, y_train)
+
+    pred = model.predict(X_test)
+
+    rmse = np.sqrt(mean_squared_error(y_test, pred))
+
+    print("Cluster:", cluster)
+    print("RMSE:", rmse)
+    print()
+plt.figure(figsize=(10,5))
+
+plt.plot(y_test.values[:100], label="Actual")
+plt.plot(rf_pred[:100], label="Predicted")
+
+plt.legend()
+plt.title("Actual vs Predicted Energy Consumption")
+
+plt.show()
