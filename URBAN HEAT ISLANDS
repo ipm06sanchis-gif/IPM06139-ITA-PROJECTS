@@ -1,0 +1,224 @@
+"""
+Urban Heat Island Prediction using Machine Learning
+Dataset: NASA MODIS Land Surface Temperature (MOD11A2)
+
+Author: Sanchi Singhal
+"""
+
+# Import Libraries
+
+import pandas as pd
+import numpy as np
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.model_selection import train_test_split
+
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import GradientBoostingRegressor
+
+from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import r2_score
+
+
+# 1 Load Dataset
+
+print("Loading MODIS dataset...")
+
+df = pd.read_csv("data/modis_uhi_dataset.csv")
+
+print("\nDataset Preview:")
+print(df.head())
+
+print("\nDataset Shape:", df.shape)
+
+
+# 2 Data Cleaning
+
+print("\nChecking missing values...")
+
+print(df.isnull().sum())
+
+df = df.dropna()
+
+print("\nMissing values removed")
+
+
+# 3 Feature Selection
+
+features = df[[
+    "NDVI",
+    "Surface_Reflectance",
+    "Latitude",
+    "Longitude",
+    "LST_Night"
+]]
+
+target = df["LST_Day"]
+
+
+# 4 Feature Scaling
+
+scaler = StandardScaler()
+
+scaled_features = scaler.fit_transform(features)
+
+
+# 5 Unsupervised Learning
+# K-Means Clustering
+
+print("\nPerforming K-Means Clustering...")
+
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+clusters = kmeans.fit_predict(scaled_features)
+
+df["Cluster"] = clusters
+
+print("\nCluster Distribution:")
+print(df["Cluster"].value_counts())
+
+
+# 6 Cluster Visualization
+
+plt.figure(figsize=(8,6))
+
+sns.scatterplot(
+    x=df["NDVI"],
+    y=df["LST_Day"],
+    hue=df["Cluster"],
+    palette="viridis"
+)
+
+plt.title("Urban Heat Island Clusters")
+plt.xlabel("Vegetation Index (NDVI)")
+plt.ylabel("Land Surface Temperature (Day)")
+
+plt.show()
+
+
+# 7 Prepare Data for Prediction
+
+X = df[[
+    "NDVI",
+    "Surface_Reflectance",
+    "Latitude",
+    "Longitude",
+    "LST_Night",
+    "Cluster"
+]]
+
+y = df["LST_Day"]
+
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42
+)
+
+
+# 8 Random Forest Regressor
+
+print("\nTraining Random Forest Model...")
+
+rf_model = RandomForestRegressor(
+    n_estimators=100,
+    random_state=42
+)
+
+rf_model.fit(X_train, y_train)
+
+rf_predictions = rf_model.predict(X_test)
+
+
+# 9 Gradient Boosting Regressor
+
+print("\nTraining Gradient Boosting Model...")
+
+gb_model = GradientBoostingRegressor()
+
+gb_model.fit(X_train, y_train)
+
+gb_predictions = gb_model.predict(X_test)
+
+
+# 10 Model Evaluation Function
+
+def evaluate_model(actual, predicted):
+
+    rmse = np.sqrt(mean_squared_error(actual, predicted))
+    mae = mean_absolute_error(actual, predicted)
+    r2 = r2_score(actual, predicted)
+
+    return rmse, mae, r2
+
+
+rf_rmse, rf_mae, rf_r2 = evaluate_model(y_test, rf_predictions)
+
+gb_rmse, gb_mae, gb_r2 = evaluate_model(y_test, gb_predictions)
+
+
+print("\n==============================")
+print("Model Evaluation Results")
+print("==============================")
+
+print("\nRandom Forest Results")
+print("RMSE:", round(rf_rmse,3))
+print("MAE:", round(rf_mae,3))
+print("R2 Score:", round(rf_r2,3))
+
+print("\nGradient Boosting Results")
+print("RMSE:", round(gb_rmse,3))
+print("MAE:", round(gb_mae,3))
+print("R2 Score:", round(gb_r2,3))
+
+
+# 11 Prediction Visualization
+
+plt.figure(figsize=(10,6))
+
+plt.plot(y_test.values[:100], label="Actual Temperature")
+plt.plot(rf_predictions[:100], label="Predicted Temperature")
+
+plt.legend()
+
+plt.title("Actual vs Predicted Land Surface Temperature")
+
+plt.xlabel("Sample Index")
+plt.ylabel("Temperature (°C)")
+
+plt.show()
+
+
+# 12 Feature Importance
+
+importance = rf_model.feature_importances_
+
+feature_importance = pd.Series(
+    importance,
+    index=X.columns
+).sort_values(ascending=False)
+
+
+plt.figure(figsize=(8,6))
+
+sns.barplot(
+    x=feature_importance,
+    y=feature_importance.index
+)
+
+plt.title("Feature Importance for Urban Heat Prediction")
+
+plt.xlabel("Importance Score")
+
+plt.show()
+
+
+print("\nTop Influential Features:")
+print(feature_importance)
